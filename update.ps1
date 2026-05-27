@@ -104,15 +104,31 @@ function Clear-StoreCache {
     }
 }
 
-function Clear-RecycleBin {
+function Clear-RecycleBinSilent {
     Write-ActivityLog "Vaciando papelera de reciclaje" -Type "INFO"
     
     try {
-        Clear-RecycleBin -Force -ErrorAction SilentlyContinue
+        $vbsScript = @'
+Set objShell = CreateObject("Shell.Application")
+Set objFolder = objShell.Namespace(10)
+objFolder.Items().InvokeVerbEx("delete")
+'@
+        $vbsPath = "$env:TEMP\empty_recycle.vbs"
+        $vbsScript | Out-File -FilePath $vbsPath -Encoding ASCII -Force
+        cscript //nologo $vbsPath 2>&1 | Out-Null
+        Remove-Item $vbsPath -Force -ErrorAction SilentlyContinue
         Write-ActivityLog "  - Papelera de reciclaje vaciada correctamente" -Type "SUCCESS"
     }
     catch {
-        Write-ActivityLog "  - No se pudo vaciar la papelera" -Type "WARNING"
+        try {
+            $shell = New-Object -ComObject Shell.Application
+            $recycleBin = $shell.Namespace(0xA)
+            $recycleBin.Items() | ForEach-Object { Remove-Item $_.Path -Force -ErrorAction SilentlyContinue }
+            Write-ActivityLog "  - Papelera de reciclaje vaciada correctamente" -Type "SUCCESS"
+        }
+        catch {
+            Write-ActivityLog "  - No se pudo vaciar la papelera (acceso denegado o ya estaba vacía)" -Type "WARNING"
+        }
     }
 }
 

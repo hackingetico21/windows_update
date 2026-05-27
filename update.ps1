@@ -156,7 +156,7 @@ function Check-MicrosoftUpdates {
         Write-Log "  - Servidor de actualizaciones no disponible" -Type "WARNING"
     }
     
-    Write-Log "Verificación de actualizaciones completada" -Type "INFO"
+    Write-Log "Verificacion de actualizaciones completada" -Type "INFO"
 }
 
 # ============================================

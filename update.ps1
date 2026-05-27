@@ -208,7 +208,8 @@ if (-not $Silent) {
     Write-Host "Operacion completada exitosamente" -ForegroundColor Green
     Write-Host "Log: $logPath" -ForegroundColor Gray
     Write-Host ""
-    Start-Sleep -Seconds 3
+    Write-Host "Presione ENTER para cerrar esta ventana..." -ForegroundColor Yellow
+    Read-Host
 }
 
 exit 0

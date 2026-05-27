@@ -97,13 +97,6 @@ function Optimize-Memory {
     Write-Log "  - Memoria optimizada" -Type "SUCCESS"
 }
 
-function Repair-System {
-    Write-Log "Verificando integridad del sistema" -Type "INFO"
-    Write-Log "  - Ejecutando SFC /SCANNOW" -Type "INFO"
-    $result = sfc /scannow 2>&1
-    Write-Log "  - Verificacion completada" -Type "SUCCESS"
-}
-
 function Update-Defender {
     Write-Log "Actualizando definiciones de seguridad" -Type "INFO"
     Update-MpSignature -ErrorAction SilentlyContinue
@@ -197,16 +190,13 @@ Clear-OldLogs
 Write-Log "Fase 5: Optimizacion de memoria" -Type "INFO"
 Optimize-Memory
 
-Write-Log "Fase 6: Verificacion de archivos del sistema" -Type "INFO"
-Repair-System
-
-Write-Log "Fase 7: Actualizacion de definiciones" -Type "INFO"
+Write-Log "Fase 6: Actualizacion de definiciones" -Type "INFO"
 Update-Defender
 
-Write-Log "Fase 8: Reporte del sistema" -Type "INFO"
+Write-Log "Fase 7: Reporte del sistema" -Type "INFO"
 Get-SystemInfo
 
-Write-Log "Fase 9: Verificacion de actualizaciones de Microsoft" -Type "INFO"
+Write-Log "Fase 8: Verificacion de actualizaciones de Microsoft" -Type "INFO"
 Check-MicrosoftUpdates
 
 Write-Log "========================================" -Type "INFO"

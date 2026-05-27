@@ -7,7 +7,8 @@
     - Limpieza de archivos temporales
     - Limpieza de caché DNS
     - Limpieza de prefetch
-    - Vaciamiento de papelera de reciclaje
+    - Limpieza de caché de Windows Store
+    - Limpieza de logs antiguos
     - Optimización del rendimiento
 .NOTES
     Copyright (c) Microsoft Corporation. All rights reserved.
@@ -91,45 +92,28 @@ function Clear-DNSCache {
     }
 }
 
-function Clear-StoreCache {
-    Write-ActivityLog "Limpiando caché de Windows Store" -Type "INFO"
-    
-    $storeCache = "$env:WINDIR\SoftwareDistribution\Download"
-    if (Test-Path $storeCache) {
-        $oldFiles = Get-ChildItem $storeCache -ErrorAction SilentlyContinue | 
-                    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) }
-        $count = $oldFiles.Count
-        $oldFiles | ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
-        Write-ActivityLog "  - Caché de Windows Store limpiada: $count archivos eliminados" -Type "INFO"
-    }
-}
-
-function Clear-RecycleBinSilent {
-    Write-ActivityLog "Vaciando papelera de reciclaje" -Type "INFO"
+function Clear-WindowsUpdateCache {
+    Write-ActivityLog "Limpiando caché de Windows Update" -Type "INFO"
     
     try {
-        $vbsScript = @'
-Set objShell = CreateObject("Shell.Application")
-Set objFolder = objShell.Namespace(10)
-objFolder.Items().InvokeVerbEx("delete")
-'@
-        $vbsPath = "$env:TEMP\empty_recycle.vbs"
-        $vbsScript | Out-File -FilePath $vbsPath -Encoding ASCII -Force
-        cscript //nologo $vbsPath 2>&1 | Out-Null
-        Remove-Item $vbsPath -Force -ErrorAction SilentlyContinue
-        Write-ActivityLog "  - Papelera de reciclaje vaciada correctamente" -Type "SUCCESS"
+        Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
+        Write-ActivityLog "  - Servicio Windows Update detenido" -Type "INFO"
     }
-    catch {
-        try {
-            $shell = New-Object -ComObject Shell.Application
-            $recycleBin = $shell.Namespace(0xA)
-            $recycleBin.Items() | ForEach-Object { Remove-Item $_.Path -Force -ErrorAction SilentlyContinue }
-            Write-ActivityLog "  - Papelera de reciclaje vaciada correctamente" -Type "SUCCESS"
-        }
-        catch {
-            Write-ActivityLog "  - No se pudo vaciar la papelera (acceso denegado o ya estaba vacía)" -Type "WARNING"
-        }
+    catch { }
+    
+    $updateCache = "$env:WINDIR\SoftwareDistribution\Download"
+    if (Test-Path $updateCache) {
+        $oldFiles = Get-ChildItem $updateCache -ErrorAction SilentlyContinue
+        $count = $oldFiles.Count
+        $oldFiles | ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+        Write-ActivityLog "  - Caché de Windows Update limpiada: $count archivos eliminados" -Type "INFO"
     }
+    
+    try {
+        Start-Service -Name "wuauserv" -ErrorAction SilentlyContinue
+        Write-ActivityLog "  - Servicio Windows Update reiniciado" -Type "INFO"
+    }
+    catch { }
 }
 
 function Clear-OldLogs {
@@ -299,35 +283,31 @@ Write-ActivityLog "Fase 2: Limpieza de caché DNS" -Type "INFO"
 Clear-DNSCache
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 3: Limpieza de caché de Windows Store" -Type "INFO"
-Clear-StoreCache
+Write-ActivityLog "Fase 3: Limpieza de caché de Windows Update" -Type "INFO"
+Clear-WindowsUpdateCache
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 4: Vaciando papelera de reciclaje" -Type "INFO"
-Clear-RecycleBin
-
-Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 5: Limpieza de logs antiguos" -Type "INFO"
+Write-ActivityLog "Fase 4: Limpieza de logs antiguos" -Type "INFO"
 Clear-OldLogs
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 6: Optimización de memoria RAM" -Type "INFO"
+Write-ActivityLog "Fase 5: Optimización de memoria RAM" -Type "INFO"
 Optimize-RAM
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 7: Verificación de archivos del sistema" -Type "INFO"
+Write-ActivityLog "Fase 6: Verificación de archivos del sistema" -Type "INFO"
 Repair-SystemFiles
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 8: Actualización de definiciones" -Type "INFO"
+Write-ActivityLog "Fase 7: Actualización de definiciones" -Type "INFO"
 Update-DefenderDefinitions
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 9: Reporte del sistema" -Type "INFO"
+Write-ActivityLog "Fase 8: Reporte del sistema" -Type "INFO"
 Get-SystemReport
 
 Write-ActivityLog "========================================" -Type "INFO"
-Write-ActivityLog "Fase 10: Componentes opcionales" -Type "INFO"
+Write-ActivityLog "Fase 9: Componentes opcionales" -Type "INFO"
 Install-OptionalComponents
 
 Write-ActivityLog "========================================" -Type "INFO"
